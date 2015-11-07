@@ -9,7 +9,7 @@
 import sqlite3 as sql
 
 DATABASE_NAME = 'cardDB.sqlite3'
-TABLE_NAMES = ['cardData','cardSets','cardEditions']
+TABLE_NAMES = ['cardData','cardSets','cardEditions','cardColours','cardColourIdentity','cardTypes','cardRulings','cardLegality']
 
 db = sql.connect(DATABASE_NAME)
 curs = db.cursor()
@@ -58,6 +58,7 @@ curs.execute("""
 			editionFlavour			TEXT,
 			editionNumber			TEXT NOT NULL,
 			editionImage			TEXT NOT NULL,
+			editionArtist			TEXT,
 			editionWatermark		TEXT,
 			editionBorder			TEXT NOT NULL,
 			editionIsTimeshifted	INTEGER NOT NULL,
@@ -70,3 +71,57 @@ curs.execute("""
 			FOREIGN KEY(setID) REFERENCES cardSets(setID)
 		);
 			""")
+
+curs.execute("""
+		CREATE TABLE IF NOT EXISTS cardColours (
+			cardID 					INTEGER PRIMARY KEY,
+			isWhite					INTEGER NOT NULL,
+			isBlue					INTEGER NOT NULL,
+			isBlack					INTEGER NOT NULL,
+			isRed					INTEGER NOT NULL,
+			isGreen					INTEGER NOT NULL,
+			isColourless			INTEGER NOT NULL,
+			isMulti					INTEGER NOT NULL,
+			FOREIGN KEY(cardID) REFERENCES cardData(cardID)
+		)
+			 """)
+
+curs.execute("""
+		CREATE TABLE IF NOT EXISTS cardColourIdentity (
+			cardID 					INTEGER PRIMARY KEY,
+			isWhite					INTEGER NOT NULL,
+			isBlue					INTEGER NOT NULL,
+			isBlack					INTEGER NOT NULL,
+			isRed					INTEGER NOT NULL,
+			isGreen					INTEGER NOT NULL,
+			isColourless			INTEGER NOT NULL,
+			isMulti					INTEGER NOT NULL,
+			FOREIGN KEY(cardID) REFERENCES cardData(cardID)
+		)
+			 """)
+
+curs.execute("""
+		CREATE TABLE IF NOT EXISTS cardTypes (
+			cardID					INTEGER NOT NULL,
+			cardType				TEXT NOT NULL,
+			FOREIGN KEY(cardID) REFERENCES cardData(cardID)
+		)
+			 """)
+
+curs.execute("""
+		CREATE TABLE IF NOT EXISTS cardRulings (
+			cardID					INTEGER NOT NULL,
+			rulingText				TEXT NOT NULL,
+			rulingDate				TEXT NOT NULL,
+			FOREIGN KEY(cardID) REFERENCES cardData(cardID)
+		)
+			 """)
+
+curs.execute("""
+		CREATE TABLE IF NOT EXISTS cardLegality (
+			cardID					INTEGER NOT NULL,
+			legalityFormat			TEXT NOT NULL,
+			legalityStatus			TEXT NOT NULL,
+			FOREIGN KEY(cardID) REFERENCES cardData(cardID)
+		)
+			 """)
