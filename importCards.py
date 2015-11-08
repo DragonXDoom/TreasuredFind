@@ -16,6 +16,7 @@ MANA_SYMBOLS = ['{W}', '{U}', '{B}', '{R}', '{G}',
 				'{W/U}', '{R/W}', '{W/B}', '{B/R}', '{G/U}', '{G/W}', '{U/R}', '{R/G}', '{B/G}', '{U/B}',
 				'{2/W}', '{2/U}', '{2/B}', '{2/R}', '{2/G}']
 COLOURS = ['White','Blue','Black','Red','Green']
+TRUE_FALSE_MAP = {'true':1,'false':0}
 
 db = sql.connect(DATABASE_NAME)
 curs = db.cursor()
@@ -36,18 +37,18 @@ except FileNotFoundError:
 		print("FAILED. Try downloading AllSets-x.json manually.")
 		AllSets = "FAILED"
 		
-def insertIntoTable(tableName, values, includeSetId=False):
+def insertIntoTable(tableName, values, includeRowId=False):
 	curs.execute("PRAGMA table_info({})".format(tableName))
 	columnNames = curs.fetchall()
-	if not includeSetId:
+	if not includeRowId:
 		columnNames = columnNames[1:]
 	columnNames = list(map(lambda x: x[1], columnNames))
-	print(columnNames)
+	#print(columnNames)
 	statement = "INSERT INTO {table}({columns}) VALUES ({params})".format(table=tableName,columns=','.join(columnNames),params=','.join(["?" for i in range(len(columnNames))]))
-	print(statement)
+	#print(statement)
 	curs.execute(statement,values)
 
-def importCard(cardData):
+def importCard(cardData, setID, setBorder, setReleaseDate):
 	# Check if card exists already.
 	# If so, just add edition
 	# Otherwise add both card data and card edition data.
@@ -58,14 +59,14 @@ def importCard(cardData):
 		cardManaCost = cardData.get('manaCost')
 		cardCMC = cardData.get('cmc',0)
 		cardTypeLine = cardData.get('type')
-		cardOracleText = cardData.get('text')
+		cardOracleText = cardData.get('text',"")
 		
 		cardPower = cardData.get('power')
 		cardToughness = cardData.get('toughness')
 		cardLoyalty = cardData.get('loyalty')
 		cardHandMod = cardData.get('hand')
 		cardLifeMod = cardData.get('life')
-		cardIsReserved = cardData.get('reserved')
+		cardIsReserved = int(cardData.get('reserved',0))
 		cardLayout = cardData.get('layout')
 		
 		cardLegendText = cardOracleText.replace(cardName, "~")
@@ -87,23 +88,23 @@ def importCard(cardData):
 		isColourless = int(sum([isWhite,isBlue,isBlack,isRed,isGreen])==0)
 		isMulti = int(sum([isWhite,isBlue,isBlack,isRed,isGreen])>=2)
 		
-		insertIntoTable('cardColours',(cardID,isWhite,isBlue,isBlack,isRed,isGreen,isColourless,isMulti))
+		insertIntoTable('cardColours',(cardID,isWhite,isBlue,isBlack,isRed,isGreen,isColourless,isMulti),True)
 		
 		# Rulings:
 		cardRulings = cardData.get('rulings',{})
 		for ruling in cardRulings:
-			insertIntoTable('cardRulings',(cardID,ruling['text'],ruling['date']))
+			insertIntoTable('cardRulings',(cardID,ruling['text'],ruling['date']),True)
 			
 		
 		# Types:
 		cardTypes = cardData.get('supertypes',[])+cardData.get('types',[])+cardData.get('subtypes',[])
 		for cardType in cardTypes:
-			insertIntoTable('cardTypes',(cardID,cardType))
+			insertIntoTable('cardTypes',(cardID,cardType),True)
 		
 		# Legality:
 		cardLegalities = cardData.get('legalities',{})
 		for legality in cardLegalities:
-			insertIntoTable('cardLegality',(cardID,legality['format'],legality['legality']))
+			insertIntoTable('cardLegality',(cardID,legality['format'],legality['legality']),True)
 			
 		# All card data has been added.
 
@@ -114,38 +115,21 @@ def importCard(cardData):
 	
 	# Now add the card edition stuff.
 	
+	editionRarity = cardData.get('rarity')
+	editionFlavour= cardData.get('flavor',"")
+	editionNumber = cardData.get('number',"")
+	editionImage  = cardData.get('imageName',"")
+	editionArtist = cardData.get('artist',"")
+	edtionWatermark=cardData.get('watermark',"")
+	editionBorder = cardData.get('border',setBorder)
+	editionTimeShifted = int(cardData.get('timeshifted',0))
+	editionReleaseDate = cardData.get('releaseDate', setReleaseDate)
+	editionIsStarter = int(cardData.get('starter',0))
+	editionNotes = cardData.get('source')
 	
-		
-		
+	insertIntoTable('cardEditions',(editionRarity,editionFlavour,editionNumber,editionImage,editionArtist,edtionWatermark,editionBorder,editionTimeShifted,editionReleaseDate,editionIsStarter,editionNotes,cardID,setID))
 	
-	# cardData we need to import:
-	# 	cardName
-	# 	cardManaCost
-	# 	cardCMC
-	# 	cardTypeLine
-	# 	cardOracleText
-	# 	cardLegendText
-	# 	cardPower
-	# 	cardToughness
-	# 	cardLoyalty
-	# 	cardHandMod
-	# 	cardLifeMod
-	# 	cardIsReserved
-	# 	cardLayout
-	# editionData we need to import:
-	# 	editionRarity
-	# 	editionFlavour
-	# 	editionNumber
-	# 	editionImage
-	# 	editionArtist
-	# 	editionWatermark
-	# 	editionBorder
-	# 	editionIsTimeshifted
-	# 	editionReleaseDate
-	# 	editionIsStarter
-	# 	editionNotes
-	# 	cardID
-	# 	setID
+	print("Successfully imported {}".format(cardName))
 			
 def importSet(setCode):
 	setFile = AllSets.get(setCode)
@@ -163,11 +147,15 @@ def importSet(setCode):
 		
 		insertIntoTable('cardSets',(setName,setCode,setGathererCode,setOldCode,setInfoCode,setReleaseDate,setBorder,setType,setBlock,setIsOnlineOnly))
 		
+		setID = curs.lastrowid
+		
 		cards = setFile.get('cards')
 		for card in cards:
-			# TODO: This
-			#importCard(card)
-			pass
+			importCard(card, setID, setBorder, setReleaseDate)
 		
-importSet('LEA')
-db.commit()
+
+if __name__ == '__main__':
+	for setCode in ["LEA","LEB","ARN","2ED","CED","CEI","pDRC","ATQ","3ED","LEG","DRK","pMEI","FEM","pLGM","4ED","ICE","CHR","HML","ALL","RQS","pARL","pCEL","MIR","MGB","ITP","VIS","5ED","pPOD","POR","VAN","WTH","pPRE","TMP","STH","PO2","pJGP","EXO","UGL","pALP","USG","ATH","ULG","6ED","PTK","UDS","S99","pGRU","pWOR","pWOS","MMQ","BRB","pSUS","pFNM","pELP","NMS","S00","PCY","BTD","INV","PLS","7ED","pMPR","APC","ODY","DKM","TOR","JUD","ONS","LGN","SCG","pREL","8ED","MRD","DST","5DN","CHK","UNH","BOK","SOK","9ED","RAV","p2HG","pGTW","GPT","pCMP","DIS","CSP","CST","TSP","TSB","pHHO","PLC","pPRO","pGPX","FUT","10E","pMGD","MED","LRW","EVG","pLPA","MOR","p15A","SHM","pSUM","EVE","DRB","ME2","pWPN","ALA","DD2","CON","DDC","ARB","M10","V09","HOP","ME3","ZEN","DDD","H09","WWK","DDE","ROE","DPA","ARC","M11","V10","DDF","SOM","PD2","ME4","MBS","DDG","NPH","CMD","M12","V11","DDH","ISD","PD3","DKA","DDI","AVR","PC2","M13","V12","DDJ","RTR","CM1","GTC","DDK","pWCQ","DGM","MMA","M14","V13","DDL","THS","C13","BNG","DDM","JOU","MD1","CNS","VMA","M15","CPK","V14","DDN","KTK","C14","DD3_DVD","DD3_EVG","DD3_GVL","DD3_JVC","FRF_UGIN","FRF","DDO","DTK","TPR","MM2","ORI","V15","DDP","BFZ","EXP"]:
+		importSet(setCode)
+		db.commit()
+	db.commit()
