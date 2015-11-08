@@ -18,6 +18,8 @@ MANA_SYMBOLS = ['{W}', '{U}', '{B}', '{R}', '{G}',
 COLOURS = ['White','Blue','Black','Red','Green']
 TRUE_FALSE_MAP = {'true':1,'false':0}
 
+otherPartsNames = {}
+
 db = sql.connect(DATABASE_NAME)
 curs = db.cursor()
 
@@ -52,6 +54,9 @@ def importCard(cardData, setID, setBorder, setReleaseDate):
 	# Check if card exists already.
 	# If so, just add edition
 	# Otherwise add both card data and card edition data.
+	
+	global otherPartsNames
+	
 	cardName = cardData.get('name')
 	curs.execute("SELECT cardID FROM cardData WHERE cardName = ?",(cardName,))
 	result = curs.fetchall()
@@ -129,6 +134,14 @@ def importCard(cardData, setID, setBorder, setReleaseDate):
 	
 	insertIntoTable('cardEditions',(editionRarity,editionFlavour,editionNumber,editionImage,editionArtist,edtionWatermark,editionBorder,editionTimeShifted,editionReleaseDate,editionIsStarter,editionNotes,cardID,setID))
 	
+	editionID = curs.lastrowid
+	
+	# Check for other parts
+	names = cardData.get('names')
+	if names != None:
+		names.remove(cardName)
+		otherPartsNames[cardName] = [editionID]+[names]
+	
 	print("Successfully imported {}".format(cardName))
 			
 def importSet(setCode):
@@ -152,6 +165,15 @@ def importSet(setCode):
 		cards = setFile.get('cards')
 		for card in cards:
 			importCard(card, setID, setBorder, setReleaseDate)
+			
+		global otherPartsNames
+		for key in otherPartsNames:
+			names = list(otherPartsNames[key])
+			currentID = names.pop(0)
+			otherIDs = list(map(lambda s:otherPartsNames[s][0]))
+			for otherID in otherIDs:
+				insertIntoTable('otherParts',(currentID, otherID),True)
+		
 		
 
 if __name__ == '__main__':
