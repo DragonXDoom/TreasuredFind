@@ -25,6 +25,7 @@ curs.execute("""
 			 cardCMC 				REAL NOT NULL,
 			 cardTypeLine 			TEXT,
 			 cardOracleText 		TEXT,
+			 cardLegendText			TEXT,
 			 cardPower 				REAL,
 			 cardToughness 			REAL,
 			 cardLoyalty 			REAL,
@@ -123,5 +124,14 @@ curs.execute("""
 			legalityFormat			TEXT NOT NULL,
 			legalityStatus			TEXT NOT NULL,
 			FOREIGN KEY(cardID) REFERENCES cardData(cardID)
+		)
+			 """)
+
+curs.execute("""
+		CREATE TABLE IF NOT EXISTS otherParts (
+			editionID				INTEGER NOT NULL,
+			otherPartID				INTEGER NOT NULL,
+			FOREIGN KEY(editionID) REFERENCES cardEditions(editionID),
+			FOREIGN KEY(otherPartID) REFERENCES cardEditions(editionID)
 		)
 			 """)
