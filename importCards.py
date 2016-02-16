@@ -3,20 +3,28 @@
 # importCards.py
 #
 # Adds all cardData from a JSON file into the database.
+# This JSON file should follow the formatting supplied by http://mtgjson.com
+# The database is created by createDatabase.py
 #
 # Created by Donald Sutherland on 7th November 2015
 
 import sqlite3 as sql
 import json
 import urllib.request, urllib.parse, urllib.error
+import re
+from distutils.version import StrictVersion 
 
 ALL_SETS_URL = 'http://mtgjson.com/json/AllSets-x.json'
+VERSION_URL  = 'http://mtgjson.com/json/version.json'
 DATABASE_NAME = 'cardDB.sqlite3'
-MANA_SYMBOLS = ['{W}', '{U}', '{B}', '{R}', '{G}',
+MANA_SYMBOLS = ['{W}', '{U}', '{B}', '{R}', '{G}', '{C}'
 				'{W/U}', '{R/W}', '{W/B}', '{B/R}', '{G/U}', '{G/W}', '{U/R}', '{R/G}', '{B/G}', '{U/B}',
-				'{2/W}', '{2/U}', '{2/B}', '{2/R}', '{2/G}']
-COLOURS = ['White','Blue','Black','Red','Green']
-TRUE_FALSE_MAP = {'true':1,'false':0}
+				'{2/W}', '{2/U}', '{2/B}', '{2/R}', '{2/G}',
+				'{WP}', '{UP}', '{BP}', '{RP}', '{GP}']
+COLOURS = ['W','U','B','R','G']
+REMINDER_TEXT_PATTERN = re.compile(r"\(.*?\)")
+LEGEND_NAME_PATTERN = re.compile(r"^([^,\s]+).*$")
+TUPLE_MERGER = lambda x,y: x|y
 
 otherPartsNames = {}
 
@@ -24,6 +32,27 @@ db = sql.connect(DATABASE_NAME)
 curs = db.cursor()
 
 
+def updateInformation():
+	print("\nChecking for updated version...")
+	with open("version.json","r") as versionFile:
+		version = versionFile.read()
+		print("Current Version:",version)
+	try:
+		urllib.request.urlretrieve(VERSION_URL, "version.json")
+		with open("version.json","r") as versionFile:
+			newVersion = versionFile.read()
+			print("Latest Version:",newVersion)
+		if StrictVersion(newVersion.strip('"'))>StrictVersion(version.strip('"')):
+			print("Downloading MTGJSON version",newVersion)
+			updateAllSets()
+	except urllib.error.URLError:
+		print("Unable to check new version.")
+	
+
+def updateAllSets():
+	urllib.request.urlretrieve(ALL_SETS_URL, "AllSets-x.json")
+	
+#updateInformation()
 print("\nAttempting to load AllSets.json locally...")
 try:
 	with open("AllSets-x.json","r") as readfile:
@@ -75,8 +104,13 @@ def importCard(cardData, setID, setBorder, setReleaseDate):
 		cardLayout = cardData.get('layout')
 		
 		cardLegendText = cardOracleText.replace(cardName, "~")
-		# if cardTypeLine.startswith("Legendary"):
-		# 	Do something about the gods here.
+		if cardTypeLine.startswith("Legendary") or cardTypeLine.startswith("Planeswalker"):
+			match = LEGEND_NAME_PATTERN.match(cardName)
+			if match:
+				print(match.group(1))
+				cardLegendText = cardLegendText.replace(match.group(1), "~")
+		
+		cardLegendText = REMINDER_TEXT_PATTERN.sub("", cardLegendText)
 		
 		insertIntoTable('cardData', (cardName,cardManaCost,cardCMC,cardTypeLine,cardOracleText,cardLegendText,cardPower,cardToughness,cardLoyalty,cardHandMod,cardLifeMod,cardIsReserved,cardLayout))
 		cardID = curs.lastrowid
@@ -93,7 +127,18 @@ def importCard(cardData, setID, setBorder, setReleaseDate):
 		isColourless = int(sum([isWhite,isBlue,isBlack,isRed,isGreen])==0)
 		isMulti = int(sum([isWhite,isBlue,isBlack,isRed,isGreen])>=2)
 		
+		# Colour Identity:
+		cardColoursIden = cardData.get('colorIdentity',[])
+		idenIsWhite = int('W' in cardColoursIden)
+		idenIsBlue  = int('U' in cardColoursIden)
+		idenIsBlack = int('B' in cardColoursIden)
+		idenIsRed   = int('R' in cardColoursIden)
+		idenIsGreen = int('G' in cardColoursIden)
+		idenIsColourless = int(sum([idenIsWhite,idenIsBlue,idenIsBlack,idenIsRed,idenIsGreen])==0)
+		idenIsMulti = int(sum([idenIsWhite,idenIsBlue,idenIsBlack,idenIsRed,idenIsGreen])>=2)
+		
 		insertIntoTable('cardColours',(cardID,isWhite,isBlue,isBlack,isRed,isGreen,isColourless,isMulti),True)
+		insertIntoTable('cardColourIdentity',(cardID,idenIsWhite,idenIsBlue,idenIsBlack,idenIsRed,idenIsGreen,idenIsColourless,idenIsMulti),True)
 		
 		# Rulings:
 		cardRulings = cardData.get('rulings',{})
@@ -132,7 +177,7 @@ def importCard(cardData, setID, setBorder, setReleaseDate):
 	editionIsStarter = int(cardData.get('starter',0))
 	editionNotes = cardData.get('source')
 	
-	insertIntoTable('cardEditions',(editionRarity,editionFlavour,editionNumber,editionImage,editionArtist,edtionWatermark,editionBorder,editionTimeShifted,editionReleaseDate,editionIsStarter,editionNotes,cardID,setID))
+	insertIntoTable('cardEditions',(editionRarity,editionFlavour,editionNumber,editionImage,editionArtist,edtionWatermark,editionBorder,editionTimeShifted,editionReleaseDate,editionIsStarter,editionNotes,1,cardID,setID))
 	
 	editionID = curs.lastrowid
 	
@@ -167,17 +212,88 @@ def importSet(setCode):
 			importCard(card, setID, setBorder, setReleaseDate)
 			
 		global otherPartsNames
+		print(otherPartsNames)
+		# {'Death': [1616, ['Life']], 'Ice': [1663, ['Fire']], 'Life': [1677, ['Death']], 'Fire': [1640, ['Ice']]}
 		for key in otherPartsNames:
 			names = list(otherPartsNames[key])
 			currentID = names.pop(0)
-			otherIDs = list(map(lambda s:otherPartsNames[s][0]))
+			otherIDs = list(map(lambda s:otherPartsNames[s][0], names[0]))
 			for otherID in otherIDs:
 				insertIntoTable('otherParts',(currentID, otherID),True)
+		otherPartsNames = {}
+				
+def checkForReprints():
+	print("CHECKING FOR REPRINTS")
+	statement = """
+	UPDATE cardEditions
+	SET editionIsReprint = 0
+	WHERE editionID IN (
+		SELECT editionID
+		FROM cardEditions
+		WHERE editionReleaseDate = (
+			SELECT MIN(editionReleaseDate)
+			FROM cardEditions
+			WHERE cardID = ?
+			)
+		AND cardID = ?
+	)
+	"""
+	curs.execute("SELECT cardID FROM cardData")
+	ids = list(map(lambda s:s[0], curs.fetchall()))
+	for ID in ids:
+		curs.execute(statement,(ID,ID))
+	db.commit()
 		
-		
+def checkForOtherPart(cardID):
+	statement = """SELECT cardData.cardID FROM cardData INNER JOIN cardEditions
+	WHERE cardEditions.editionID IN (SELECT otherParts.otherPartID FROM cardData INNER JOIN cardEditions INNER JOIN otherParts
+	WHERE cardData.cardID = ? AND cardEditions.cardID = cardData.cardID AND cardEditions.editionID = otherParts.editionID) AND cardEditions.cardID = cardData.cardID"""
+	curs.execute(statement, (cardID,))
+	return curs.fetchall()
 
+def checkColourIdentity(cardID):
+	# Obsolete as of MtGJSON version 3.3.6
+	curs.execute("SELECT cardData.cardManaCost, cardData.cardLegendText,cardColours.isWhite,cardColours.isBlue,cardColours.isBlack,cardColours.isRed,cardColours.isGreen FROM cardData INNER JOIN cardColours WHERE cardColours.cardID = cardData.cardID AND cardData.cardID = ?", (cardID,))
+	data = curs.fetchone()
+	manaCost = data[0]
+	if manaCost == None: manaCost = ""
+	legendText = data[1]
+	if legendText == None: legendText = ""
+	colours = data[2:]
+	symbols = ""
+	result = [0,0,0,0,0]
+	for symbol in MANA_SYMBOLS:
+		if symbol in manaCost or symbol in legendText:
+			symbols += symbol
+	for i in range(5):
+		if COLOURS[i] in symbols:
+			result[i] = 1
+	result = list(map(TUPLE_MERGER,result,colours))
+	#result += [int(sum(result)==0),int(sum(result))>=2]
+	return tuple(result)
+	
+
+def updateColourIdentity():
+	# Obsolete as of MtGJSON version 3.3.6
+	curs.execute("SELECT cardID FROM cardData")
+	ids = list(map(lambda s:s[0], curs.fetchall()))
+	for ID in ids:
+		identity = (0,0,0,0,0)
+		result = checkForOtherPart(ID)
+		if result != []:
+			result = list(map(lambda i:i[0], result))
+			for otherPartID in result:
+				identity = tuple(map(TUPLE_MERGER, identity, checkColourIdentity(otherPartID)))
+		identity = tuple(map(TUPLE_MERGER, identity, checkColourIdentity(ID)))
+		identity = (ID,) + identity + (int(sum(identity)==0),int(sum(identity))>=2)
+		insertIntoTable("cardColourIdentity", identity, True)
+		print("Succesfully updated colour identity for cardID", ID)
+	db.commit()
+		
 if __name__ == '__main__':
-	for setCode in ["LEA","LEB","ARN","2ED","CED","CEI","pDRC","ATQ","3ED","LEG","DRK","pMEI","FEM","pLGM","4ED","ICE","CHR","HML","ALL","RQS","pARL","pCEL","MIR","MGB","ITP","VIS","5ED","pPOD","POR","VAN","WTH","pPRE","TMP","STH","PO2","pJGP","EXO","UGL","pALP","USG","ATH","ULG","6ED","PTK","UDS","S99","pGRU","pWOR","pWOS","MMQ","BRB","pSUS","pFNM","pELP","NMS","S00","PCY","BTD","INV","PLS","7ED","pMPR","APC","ODY","DKM","TOR","JUD","ONS","LGN","SCG","pREL","8ED","MRD","DST","5DN","CHK","UNH","BOK","SOK","9ED","RAV","p2HG","pGTW","GPT","pCMP","DIS","CSP","CST","TSP","TSB","pHHO","PLC","pPRO","pGPX","FUT","10E","pMGD","MED","LRW","EVG","pLPA","MOR","p15A","SHM","pSUM","EVE","DRB","ME2","pWPN","ALA","DD2","CON","DDC","ARB","M10","V09","HOP","ME3","ZEN","DDD","H09","WWK","DDE","ROE","DPA","ARC","M11","V10","DDF","SOM","PD2","ME4","MBS","DDG","NPH","CMD","M12","V11","DDH","ISD","PD3","DKA","DDI","AVR","PC2","M13","V12","DDJ","RTR","CM1","GTC","DDK","pWCQ","DGM","MMA","M14","V13","DDL","THS","C13","BNG","DDM","JOU","MD1","CNS","VMA","M15","CPK","V14","DDN","KTK","C14","DD3_DVD","DD3_EVG","DD3_GVL","DD3_JVC","FRF_UGIN","FRF","DDO","DTK","TPR","MM2","ORI","V15","DDP","BFZ","EXP"]:
+	for setCode in AllSets:
 		importSet(setCode)
 		db.commit()
+	checkForReprints()
+	#updateColourIdentity()
 	db.commit()

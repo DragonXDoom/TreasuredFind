@@ -9,7 +9,7 @@
 import sqlite3 as sql
 
 DATABASE_NAME = 'cardDB.sqlite3'
-TABLE_NAMES = ['cardData','cardSets','cardEditions','cardColours','cardColourIdentity','cardTypes','cardRulings','cardLegality']
+TABLE_NAMES = ['cardData','cardSets','cardEditions','cardColours','cardColourIdentity','cardTypes','cardRulings','cardLegality', 'otherParts']
 
 db = sql.connect(DATABASE_NAME)
 curs = db.cursor()
@@ -66,6 +66,7 @@ curs.execute("""
 			editionReleaseDate		TEXT NOT NULL,
 			editionIsStarter		INTEGER NOT NULL,
 			editionNotes			TEXT,
+			editionIsReprint		INTEGER NOT NULL,
 			cardID					INTEGER NOT NULL,
 			setID					INTEGER NOT NULL,
 			FOREIGN KEY(cardID) REFERENCES cardData(cardID),
