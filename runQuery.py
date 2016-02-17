@@ -106,7 +106,7 @@ def convertToSQL(token):
 					
 			elif matchtype == "colour" or matchtype == "colourIden":
 				# WUBRG, C, M. ! means exclude unselected.
-				statementPieces = []
+				
 				comparator = groups[0]
 				colours = groups[1]
 				#[cWhite, cBlue, cBlack, cRed, cGreen, cCLess, cMulti] = ['w' in colours, 'u' in colours, 'b' in colours, 'r' in colours, 'g' in colours, 'c' in colours, 'm' in colours]
@@ -115,21 +115,27 @@ def convertToSQL(token):
 				elif matchtype == "colourIden":
 					table = "cardColourIdentity"
 					
+				isWhite = ('w' in colours)
+				isBlue = ('u' in colours)
+				isBlack = ('b' in colours)
+				isRed = ('r' in colours)
+				isGreen = ('g' in colours)
+				isCLess = ('c' in colours)
 				multi = ('m' in colours)
 				
-				
-				if comparator == ":":
-					if 'w' in colours:
+				if comparator == ":" and matchtype == "colour":
+					statementPieces = []
+					if isWhite:
 						statementPieces.append("{0}.isWhite = 1".format(table))
-					if 'u' in colours:
+					if isBlue:
 						statementPieces.append("{0}.isBlue = 1".format(table))
-					if 'b' in colours:
+					if isBlack:
 						statementPieces.append("{0}.isBlack = 1".format(table))
-					if 'r' in colours:
+					if isRed:
 						statementPieces.append("{0}.isRed = 1".format(table))
-					if 'g' in colours:
+					if isGreen:
 						statementPieces.append("{0}.isGreen = 1".format(table))
-					if 'c' in colours:
+					if isCLess:
 						statementPieces.append("{0}.isColourless = 1".format(table))
 					
 					if len(statementPieces) > 0:
@@ -138,56 +144,63 @@ def convertToSQL(token):
 					if multi:
 						statement = "("+statement+" AND {0}.isMulti = 1)".format(table)
 					
-				elif comparator == "!":
+				elif comparator == "!" or matchtype == "colourIden":
 					# Exclude unselected.
 					statementPiecesTrue = []
 					statementPiecesFalse = []
 					
 					
-					if 'w' in colours:
+					if isWhite:
 						statementPiecesTrue.append("{0}.isWhite = 1".format(table))
 					else:
 						statementPiecesFalse.append("{0}.isWhite = 0".format(table))
 						
-					if 'u' in colours:
+					if isBlue:
 						statementPiecesTrue.append("{0}.isBlue = 1".format(table))
 					else:
 						statementPiecesFalse.append("{0}.isBlue = 0".format(table))
 						
-					if 'b' in colours:
+					if isBlack:
 						statementPiecesTrue.append("{0}.isBlack = 1".format(table))
 					else:
 						statementPiecesFalse.append("{0}.isBlack = 0".format(table))
 						
-					if 'r' in colours:
+					if isRed:
 						statementPiecesTrue.append("{0}.isRed = 1".format(table))
 					else:
 						statementPiecesFalse.append("{0}.isRed = 0".format(table))
 						
-					if 'g' in colours:
+					if isGreen:
 						statementPiecesTrue.append("{0}.isGreen = 1".format(table))
 					else:
 						statementPiecesFalse.append("{0}.isGreen = 0".format(table))
 						
-					if 'c' in colours:
-						statementPiecesTrue.append("{0}.isColourless = 1".format(table))
+						
+					if matchtype != "colourIden":
+						if isCLess:
+							statementPiecesTrue.append("{0}.isColourless = 1".format(table))
+						else:
+							statementPiecesFalse.append("{0}.isColourless = 0".format(table))
+						
+						if multi == False:
+							statement = "((" + " OR ".join(statementPiecesTrue) +") AND (" + " AND ".join(statementPiecesFalse) + "))"
+						if multi == True:
+							statement = "(" + " AND ".join(statementPiecesTrue) + " AND " + " AND ".join(statementPiecesFalse) + ")"
 					else:
-						statementPiecesFalse.append("{0}.isColourless = 0".format(table))
-						
-					if multi == False:
-						statement = "((" + " OR ".join(statementPiecesTrue) +") AND (" + " AND ".join(statementPiecesFalse) + "))"
-					if multi == True:
-						statement = "(" + " AND ".join(statementPiecesTrue) + " AND " + " AND ".join(statementPiecesFalse) + ")"
-						
-						
+						if multi == False:
+							statement = "(" + " AND ".join(statementPiecesFalse) + ")"
+						if multi == True:
+							statement = "((" + " AND ".join(statementPiecesFalse) + ") AND ( " + " OR ".join(statementPiecesTrue) + ") AND ({0}.isMulti = 1))".format(table)
 					
-				
-			elif matchtype == "colourIden":
-				comparator = groups[0]
-				colours = groups[1]
-				# TODO
 			elif matchtype == "type":
 				types = groups[0].split()
 				# TODO
 				
 			return statement
+
+
+if __name__ == '__main__':
+	while True:
+		x = input("> ")
+		if not x: break
+		else: print(convertToSQL(x))
